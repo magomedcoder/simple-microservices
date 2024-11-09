@@ -1,0 +1,139 @@
+services:
+  gateway-service:
+    build:
+      context: ./gateway-service
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      PORT: 80
+      DSN_RABBITMQ: "amqp://guest:guest@rabbitmq"
+      HTTP_AUTH_SERVICE: "http://auth-service"
+      HTTP_LOGGER_SERVICE: "http://logger-service"
+      HTTP_MAILER_SERVICE: "http://mailer-service"
+      TCP_LOGGER_SERVICE: "logger-service:5001"
+    networks:
+      - simple-network
+    ports:
+      - "8080:80"
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      PORT: 80
+      DSN_POSTGRES: "host=postgres port=5432 dbname=auth_service user=postgres password=postgres sslmode=disable"
+      HTTP_LOGGER_SERVICE: "http://logger-service"
+    networks:
+      - simple-network
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  listener-service:
+    build:
+      context: ./listener-service
+      dockerfile: Dockerfile
+    environment:
+      DSN_RABBITMQ: "amqp://guest:guest@rabbitmq"
+      HTTP_LOGGER_SERVICE: "http://logger-service"
+    networks:
+      - simple-network
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  logger-service:
+    build:
+      context: ./logger-service
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      PORT: 80
+      RPC_PORT: 5001
+      GRPC_PORT: 50001
+      DSN_MONGODB: "mongodb://mongo:27017"
+    networks:
+      - simple-network
+    ports:
+      - "50001:50001"
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  mailer-service:
+    build:
+      context: ./mailer-service
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      PORT: 80
+      MAIL_DOMAIN: localhost
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_ENCRYPTION: none
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      FROM_NAME: ""
+      FROM_ADDRESS: ""
+    networks:
+      - simple-network
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: auth_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - simple-network
+    ports:
+      - "5432:5432"
+
+  mongodb:
+    image: mongo:4.4.29
+    environment:
+      MONGO_INITDB_DATABASE: logs
+      MONGO_INITDB_ROOT_USERNAME: mongo
+      MONGO_INITDB_ROOT_PASSWORD: mongo
+    volumes:
+      - mongodb-data:/var/lib/mongodb/data
+    networks:
+      - simple-network
+    ports:
+      - "27017:27017"
+
+  rabbitmq:
+    image: rabbitmq:4.0.3
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - simple-network
+    ports:
+      - "5672:5672"
+
+  mailhog:
+    image: 'mailhog/mailhog:v1.0.1'
+    networks:
+      - simple-network
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  postgres-data:
+  mongodb-data:
+  rabbitmq-data:
+
+networks:
+  simple-network:
+    driver: bridge
